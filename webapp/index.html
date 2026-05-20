@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>YouTube 업로더</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    :root {
+      --bg: #0a0a0f;
+      --card: #13131a;
+      --border: #2a2a3a;
+      --red: #ff2d2d;
+      --red-glow: rgba(255,45,45,0.25);
+      --green: #00e676;
+      --yellow: #ffd600;
+      --text: #f0f0f0;
+      --muted: #666;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding: 24px 16px 40px;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* 헤더 */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+    .yt-icon {
+      width: 42px; height: 42px;
+      background: var(--red);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 0 20px var(--red-glow);
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 20px; font-weight: 700; }
+    .header p { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* 카드 */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      margin-bottom: 14px;
+    }
+    .card-title {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    /* 토큰 입력 섹션 */
+    .token-section { }
+    .token-input-wrap {
+      display: flex;
+      gap: 8px;
+    }
+    .token-input {
+      flex: 1;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: monospace;
+      outline: none;
+    }
+    .token-input:focus { border-color: var(--red); }
+    .token-save-btn {
+      background: var(--red);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .token-status {
+      font-size: 12px;
+      margin-top: 8px;
+      color: var(--muted);
+    }
+    .token-status.ok { color: var(--green); }
+    .token-clear {
+      font-size: 11px;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin-top: 4px;
+      text-decoration: underline;
+    }
+
+    /* 영상 정보 */
+    .video-title {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.4;
+      margin-bottom: 8px;
+    }
+    .video-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+    .badge {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+    .badge.instant { background: rgba(0,230,118,0.12); color: var(--green); }
+    .badge.scheduled { background: rgba(255,214,0,0.12); color: var(--yellow); }
+    .badge.row { background: rgba(255,255,255,0.07); color: var(--muted); }
+    .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 10px 0; }
+
+    /* 업로드 버튼 */
+    .upload-btn {
+      width: 100%;
+      padding: 18px;
+      background: var(--red);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 24px var(--red-glow);
+      transition: transform 0.12s, opacity 0.12s;
+    }
+    .upload-btn:active { transform: scale(0.97); }
+    .upload-btn:disabled {
+      background: #222;
+      color: #444;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    /* 진행 */
+    .progress-card { display: none; }
+    .progress-card.show { display: block; }
+    .progress-bar-wrap {
+      background: var(--border);
+      border-radius: 99px;
+      height: 5px;
+      margin: 10px 0 8px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: var(--red);
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.4s ease;
+    }
+    .progress-label { font-size: 13px; color: var(--muted); }
+
+    /* 로그 */
+    .log-list {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .log-item {
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 5px 10px;
+      border-radius: 7px;
+      background: rgba(255,255,255,0.04);
+    }
+    .log-item.success { color: var(--green); }
+    .log-item.error { color: #ff6b6b; }
+
+    /* 하단 버튼들 */
+    .btn-row { display: flex; gap: 8px; margin-bottom: 14px; }
+    .ghost-btn {
+      flex: 1;
+      padding: 13px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .ghost-btn:active { background: rgba(255,255,255,0.05); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      display: inline-block;
+      width: 15px; height: 15px;
+      border: 2px solid rgba(255,255,255,0.25);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="yt-icon">▶</div>
+  <div>
+    <h1>YouTube 업로더</h1>
+    <p>수동 즉시 업로드 · RichSeo5460</p>
+  </div>
+</div>
+
+<!-- GitHub Token 입력 -->
+<div class="card token-section" id="tokenSection">
+  <div class="card-title">🔑 GitHub Token</div>
+  <div class="token-input-wrap">
+    <input class="token-input" id="tokenInput" type="password" placeholder="ghp_xxxxxxxxxxxx" />
+    <button class="token-save-btn" onclick="saveToken()">저장</button>
+  </div>
+  <div class="token-status" id="tokenStatus">토큰을 입력하면 브라우저에만 저장됩니다</div>
+  <button class="token-clear" id="tokenClearBtn" onclick="clearToken()" style="display:none">토큰 초기화</button>
+</div>
+
+<!-- 다음 영상 -->
+<div class="card">
+  <div class="card-title">📋 다음 업로드 영상</div>
+  <div id="videoInfo"><div class="empty">불러오는 중...</div></div>
+</div>
+
+<!-- 업로드 버튼 -->
+<button class="upload-btn" id="uploadBtn" onclick="triggerUpload()">
+  🚀 지금 바로 업로드
+</button>
+
+<!-- 진행 -->
+<div class="card progress-card" id="progressCard">
+  <div class="card-title">⏳ 진행 상황</div>
+  <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+  <div class="progress-label" id="progressLabel">대기 중...</div>
+</div>
+
+<!-- 로그 -->
+<div class="card" id="logCard" style="display:none">
+  <div class="card-title">📡 실행 로그</div>
+  <div class="log-list" id="logList"></div>
+</div>
+
+<!-- 하단 버튼 -->
+<div class="btn-row">
+  <button class="ghost-btn" onclick="location.reload()">🔄 새로고침</button>
+  <a class="ghost-btn" href="https://github.com/RichSeo5460/youtube-auto-uploader/actions" target="_blank">
+    📊 Actions 로그
+  </a>
+</div>
+
+<script>
+const SHEET_ID   = "1VGHH_xkbNWKfzMLWIXeJRM3GHvjVEm_nvZM8FEhTK40";
+const SHEET_NAME = "숏츠시트";
+const GH_OWNER   = "RichSeo5460";
+const GH_REPO    = "youtube-auto-uploader";
+const WORKFLOW   = "auto_upload.yml";
+
+// ── 토큰 관리 ──
+function saveToken() {
+  const val = document.getElementById('tokenInput').value.trim();
+  if (!val) return;
+  localStorage.setItem('gh_pat', val);
+  renderTokenStatus();
+}
+function clearToken() {
+  localStorage.removeItem('gh_pat');
+  document.getElementById('tokenInput').value = '';
+  renderTokenStatus();
+}
+function getToken() { return localStorage.getItem('gh_pat') || ''; }
+function renderTokenStatus() {
+  const token = getToken();
+  const status = document.getElementById('tokenStatus');
+  const clearBtn = document.getElementById('tokenClearBtn');
+  const input = document.getElementById('tokenInput');
+  if (token) {
+    status.textContent = '✅ 토큰 저장됨 (이 기기에만)';
+    status.className = 'token-status ok';
+    clearBtn.style.display = 'inline';
+    input.value = token.slice(0,8) + '••••••••••••••••';
+  } else {
+    status.textContent = '토큰을 입력하면 브라우저에만 저장됩니다';
+    status.className = 'token-status';
+    clearBtn.style.display = 'none';
+  }
+}
+
+// ── 시트에서 다음 영상 로드 ──
+async function loadNextVideo() {
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+    const res = await fetch(url);
+    const text = await res.text();
+    const rows = parseCSV(text);
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const title    = clean(row[0]);
+      const dropbox  = clean(row[3]);
+      const status   = clean(row[4]);
+      const schedule = clean(row[6] || '');
+      if (status === '업로드전' && dropbox) {
+        return { rowNum: i+1, title, dropbox, schedule };
+      }
+    }
+    return null;
+  } catch(e) { return { error: e.message }; }
+}
+
+function clean(s) { return (s||'').replace(/^"|"$/g,'').trim(); }
+
+function parseCSV(text) {
+  const rows = [];
+  for (const line of text.split('\n')) {
+    const cells = []; let cell='', inQ=false;
+    for (let i=0; i<line.length; i++) {
+      const c = line[i];
+      if (c==='"') { inQ=!inQ; }
+      else if (c===',' && !inQ) { cells.push(cell); cell=''; }
+      else { cell+=c; }
+    }
+    cells.push(cell);
+    rows.push(cells);
+  }
+  return rows;
+}
+
+async function init() {
+  renderTokenStatus();
+  const video = await loadNextVideo();
+  const info = document.getElementById('videoInfo');
+  const btn  = document.getElementById('uploadBtn');
+
+  if (!video) {
+    info.innerHTML = '<div class="empty">✅ 대기 중인 영상 없음</div>';
+    btn.disabled = true; return;
+  }
+  if (video.error) {
+    info.innerHTML = `<div class="empty" style="color:#ff6b6b">⚠️ ${video.error}</div>`;
+    return;
+  }
+  const badge = video.schedule
+    ? `<span class="badge scheduled">📅 ${video.schedule}</span>`
+    : `<span class="badge instant">⚡ 즉시공개</span>`;
+  info.innerHTML = `
+    <div class="video-title">${video.title||'(제목 없음)'}</div>
+    <div class="video-meta">${badge}<span class="badge row">${video.rowNum}행</span></div>`;
+  window._video = video;
+}
+
+// ── 업로드 트리거 ──
+async function triggerUpload() {
+  const token = getToken();
+  if (!token) {
+    alert('먼저 GitHub Token을 입력해주세요!');
+    document.getElementById('tokenInput').focus();
+    return;
+  }
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>요청 중...';
+  showProgress('GitHub Actions 실행 요청 중...', 10);
+  showLog(); addLog('🚀 업로드 요청 시작...', 'info');
+
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${WORKFLOW}/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ref: 'main' }),
+      }
+    );
+    if (res.status === 204) {
+      addLog('✅ 실행 요청 성공! (약 30초~2분 소요)', 'success');
+      showProgress('워크플로우 실행 중...', 35);
+      pollWorkflow(token);
+    } else {
+      const err = await res.text();
+      addLog(`❌ 실패 (${res.status}): ${err}`, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '🚀 지금 바로 업로드';
+      hideProgress();
+    }
+  } catch(e) {
+    addLog(`❌ ${e.message}`, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '🚀 지금 바로 업로드';
+    hideProgress();
+  }
+}
+
+async function pollWorkflow(token) {
+  let attempts = 0;
+  const iv = setInterval(async () => {
+    attempts++;
+    showProgress(`완료 확인 중... (${attempts*6}초)`, Math.min(35+attempts*3, 90));
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/actions/runs?per_page=1`,
+        { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' } }
+      );
+      const data = await res.json();
+      const run = data.workflow_runs?.[0];
+      if (run?.status === 'completed') {
+        clearInterval(iv);
+        if (run.conclusion === 'success') {
+          showProgress('✅ 업로드 완료!', 100);
+          addLog('🎉 YouTube 업로드 성공!', 'success');
+          addLog('📺 YouTube Studio에서 확인하세요', 'info');
+        } else {
+          showProgress(`❌ 실패: ${run.conclusion}`, 100);
+          addLog(`❌ 실패: ${run.conclusion}`, 'error');
+        }
+        const btn = document.getElementById('uploadBtn');
+        btn.innerHTML = '🔄 새로고침';
+        btn.disabled = false;
+        btn.onclick = () => location.reload();
+      }
+    } catch(e) {}
+    if (attempts >= 20) { clearInterval(iv); showProgress('GitHub Actions에서 직접 확인하세요', 100); }
+  }, 6000);
+}
+
+function showProgress(label, pct) {
+  document.getElementById('progressCard').classList.add('show');
+  document.getElementById('progressBar').style.width = pct+'%';
+  document.getElementById('progressLabel').textContent = label;
+}
+function hideProgress() { document.getElementById('progressCard').classList.remove('show'); }
+function showLog() { document.getElementById('logCard').style.display='block'; }
+function addLog(msg, type='info') {
+  const list = document.getElementById('logList');
+  const el = document.createElement('div');
+  el.className = `log-item ${type}`;
+  el.textContent = msg;
+  list.appendChild(el);
+  list.scrollTop = list.scrollHeight;
+}
+
+init();
+</script>
+</body>
+</html>
