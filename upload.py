@@ -1,9 +1,19 @@
 """
-YouTube 자동 업로드 스크립트 v3
+YouTube 자동 업로드 스크립트 v4
 - 구글 시트 G열에 날짜 있으면 예약 공개, 없으면 즉시 공개
+- F열 채널 번호에 따라 해당 채널로 업로드
 - 컬럼: A=제목, B=대본, C=영상url, D=dropbox_url, E=업로드여부, F=유튜브채널, G=예약날짜
 - 상태: 업로드전 → 업로드완료
 """
+
+# ──────────────────────────────────────────
+# 채널 번호 → 채널 ID 매핑
+# ──────────────────────────────────────────
+CHANNEL_MAP = {
+    "1": "UCMujLGISA9sRh0ki9H5xXLg",   # 모먼트랩
+    "2": "UCuyhcW0c4QCcCRtA5oeMn1w",   # 데일리인사이트
+    "3": "UCqr08lng11l-14li4vaLc3g",   # 생활정보TV
+}
 
 import os
 import json
@@ -18,17 +28,16 @@ from googleapiclient.http import MediaFileUpload
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.auth.transport.requests import Request
 
-# 한국시간 (KST = UTC+9)
 KST = timezone(timedelta(hours=9))
 
 # ──────────────────────────────────────────
 # 환경변수 로드
 # ──────────────────────────────────────────
-DROPBOX_TOKEN     = os.environ["DROPBOX_TOKEN"]
-GOOGLE_SHEET_ID   = os.environ["GOOGLE_SHEET_ID"]
-GOOGLE_SHEET_NAME = os.environ.get("GOOGLE_SHEET_NAME", "숏츠시트")
+DROPBOX_TOKEN      = os.environ["DROPBOX_TOKEN"]
+GOOGLE_SHEET_ID    = os.environ["GOOGLE_SHEET_ID"]
+GOOGLE_SHEET_NAME  = os.environ.get("GOOGLE_SHEET_NAME", "숏츠시트")
 YOUTUBE_TOKEN_JSON = os.environ["YOUTUBE_TOKEN_JSON"]
-GOOGLE_SA_JSON    = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
+GOOGLE_SA_JSON     = os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"]
 
 
 # ──────────────────────────────────────────
@@ -46,38 +55,29 @@ def get_sheet():
 
 
 def get_next_video(sheet):
-    """
-    E열이 '업로드전'인 행 중:
-    - G열(예약날짜)이 있으면 → 오늘 날짜 일치하는 것만
-    - G열이 비어있으면 → 첫 번째 행 즉시 업로드
-    """
     now_kst = datetime.now(KST)
     today_str = now_kst.strftime("%Y-%m-%d")
     all_rows = sheet.get_all_values()
 
-    # 예약 날짜가 오늘인 행 먼저 탐색
-    for i, row in enumerate(all_rows[1:], start=2):
-        while len(row) < 7:
-            row.append("")
-        status       = row[4].strip()  # E열
-        scheduled    = row[6].strip()  # G열
-
-        if status == "업로드전" and scheduled:
-            # 날짜 파싱 (2026-05-22 또는 2026-05-22 19:00)
-            try:
-                sched_date = scheduled[:10]  # YYYY-MM-DD 부분만
-                if sched_date == today_str:
-                    return i, row, scheduled
-            except:
-                pass
-
-    # 예약 없는 행 탐색 (G열 비어있는 것)
+    # 예약 날짜가 오늘인 행 먼저
     for i, row in enumerate(all_rows[1:], start=2):
         while len(row) < 7:
             row.append("")
         status    = row[4].strip()
         scheduled = row[6].strip()
+        if status == "업로드전" and scheduled:
+            try:
+                if scheduled[:10] == today_str:
+                    return i, row, scheduled
+            except:
+                pass
 
+    # 예약 없는 행 (즉시 공개)
+    for i, row in enumerate(all_rows[1:], start=2):
+        while len(row) < 7:
+            row.append("")
+        status    = row[4].strip()
+        scheduled = row[6].strip()
         if status == "업로드전" and not scheduled:
             return i, row, ""
 
@@ -86,7 +86,7 @@ def get_next_video(sheet):
 
 def mark_as_done(sheet, row_num, video_id):
     sheet.update_cell(row_num, 5, "업로드완료")
-    sheet.update_cell(row_num, 7, f"https://youtube.com/shorts/{video_id}")
+    sheet.update_cell(row_num, 8, f"https://youtube.com/shorts/{video_id}")
     print(f"✅ 시트 업데이트: {row_num}행 → 업로드완료")
 
 
@@ -94,24 +94,16 @@ def mark_as_done(sheet, row_num, video_id):
 # 드롭박스 다운로드
 # ──────────────────────────────────────────
 def download_from_dropbox_url(dropbox_url):
-    """
-    드롭박스 공유 URL (scl/fi 형식) 직접 다운로드
-    - st= 파라미터 제거 (세션 토큰, 있으면 400 에러)
-    """
-    # st= 파라미터 제거
     direct_url = re.sub(r'&st=[^&]*', '', dropbox_url)
     direct_url = re.sub(r'\?st=[^&]*&', '?', direct_url)
     direct_url = re.sub(r'\?st=[^&]*$', '', direct_url)
 
-    # dl=1 추가
     if "dl=0" in direct_url:
         direct_url = direct_url.replace("dl=0", "dl=1")
     elif "dl=1" not in direct_url:
         direct_url += "&dl=1" if "?" in direct_url else "?dl=1"
 
-    print(f"📥 드롭박스 다운로드 중...")
-    print(f"   URL: {direct_url[:80]}...")
-
+    print(f"📥 드롭박스 다운로드 중... {direct_url[:70]}...")
     headers = {"User-Agent": "Mozilla/5.0"}
     response = requests.get(direct_url, headers=headers, stream=True, allow_redirects=True)
     response.raise_for_status()
@@ -123,7 +115,6 @@ def download_from_dropbox_url(dropbox_url):
         total += len(chunk)
     tmp.flush()
     tmp.close()
-
     print(f"✅ 다운로드 완료: {total / 1024 / 1024:.1f}MB")
     return tmp.name
 
@@ -145,10 +136,16 @@ def get_youtube_service():
     return build("youtube", "v3", credentials=creds)
 
 
-def upload_to_youtube(service, video_path, title, description, scheduled=""):
-    """
-    scheduled: "2026-05-22 19:00" 형식이면 예약공개, 없으면 즉시공개
-    """
+def upload_to_youtube(service, video_path, title, description, scheduled="", channel_num="1"):
+    # 채널 ID 결정
+    channel_id = CHANNEL_MAP.get(str(channel_num).strip(), CHANNEL_MAP["1"])
+    channel_name = {v: k for k, v in {
+        "모먼트랩": CHANNEL_MAP["1"],
+        "데일리인사이트": CHANNEL_MAP["2"],
+        "생활정보TV": CHANNEL_MAP["3"],
+    }.items()}.get(channel_id, f"채널{channel_num}")
+    print(f"📺 업로드 채널: {channel_name} ({channel_id})")
+
     # 해시태그 추출
     tags = []
     for word in description.split():
@@ -159,26 +156,25 @@ def upload_to_youtube(service, video_path, title, description, scheduled=""):
     if "#shorts" not in description.lower():
         description += "\n\n#shorts"
 
-    # 공개 상태 결정
+    # 공개 상태
     if scheduled:
         try:
-            # 예약 시간 파싱 (KST → UTC ISO 형식)
             if len(scheduled) == 10:
                 scheduled += " 09:00"
             sched_dt = datetime.strptime(scheduled, "%Y-%m-%d %H:%M")
-            sched_kst = KST.localize(sched_dt) if hasattr(KST, 'localize') else sched_dt.replace(tzinfo=KST)
+            sched_kst = sched_dt.replace(tzinfo=KST)
             sched_utc = sched_kst.astimezone(timezone.utc)
             publish_at = sched_utc.strftime("%Y-%m-%dT%H:%M:%S.000Z")
-            privacy = "private"  # 예약은 private + publishAt
-            print(f"⏰ 예약 공개: {scheduled} KST → {publish_at}")
+            privacy = "private"
+            print(f"⏰ 예약: {scheduled} KST")
         except Exception as e:
-            print(f"⚠️ 날짜 파싱 실패 ({e}), 즉시 공개로 전환")
+            print(f"⚠️ 날짜 파싱 실패({e}), 즉시공개로 전환")
             publish_at = None
             privacy = "public"
     else:
         publish_at = None
         privacy = "public"
-        print("🚀 즉시 공개 업로드")
+        print("🚀 즉시 공개")
 
     body = {
         "snippet": {
@@ -187,13 +183,13 @@ def upload_to_youtube(service, video_path, title, description, scheduled=""):
             "tags": tags[:500],
             "categoryId": "22",
             "defaultLanguage": "ko",
+            "channelId": channel_id,  # 채널 지정
         },
         "status": {
             "privacyStatus": privacy,
             "selfDeclaredMadeForKids": False,
         }
     }
-
     if publish_at:
         body["status"]["publishAt"] = publish_at
 
@@ -218,10 +214,7 @@ def upload_to_youtube(service, video_path, title, description, scheduled=""):
             print(f"   {int(status_obj.progress() * 100)}%...")
 
     video_id = response["id"]
-    if publish_at:
-        print(f"✅ 예약 업로드 완료! {scheduled} KST에 공개됩니다")
-    else:
-        print(f"✅ 즉시 업로드 완료! https://youtube.com/shorts/{video_id}")
+    print(f"✅ 완료! https://youtube.com/shorts/{video_id}")
     return video_id
 
 
@@ -231,7 +224,7 @@ def upload_to_youtube(service, video_path, title, description, scheduled=""):
 def main():
     print("=" * 50)
     now_kst = datetime.now(KST)
-    print(f"🎬 YouTube 자동 업로드 v3 ({now_kst.strftime('%Y-%m-%d %H:%M KST')})")
+    print(f"🎬 YouTube 자동 업로드 v4 ({now_kst.strftime('%Y-%m-%d %H:%M KST')})")
     print("=" * 50)
 
     sheet = get_sheet()
@@ -244,22 +237,27 @@ def main():
     title       = row[0].strip()
     script      = row[1].strip()
     dropbox_url = row[3].strip()
+    channel_num = row[5].strip() if len(row) > 5 else "1"  # F열
 
-    print(f"\n📋 업로드할 영상:")
+    # 채널명 출력
+    channel_names = {"1": "모먼트랩", "2": "데일리인사이트", "3": "생활정보TV"}
+    print(f"\n📋 업로드 정보:")
     print(f"   제목: {title}")
+    print(f"   채널: {channel_names.get(channel_num, channel_num)}번")
     print(f"   예약: {scheduled if scheduled else '즉시공개'}")
 
     local_path = download_from_dropbox_url(dropbox_url)
 
     try:
         yt_service = get_youtube_service()
-        video_id = upload_to_youtube(yt_service, local_path, title, script, scheduled)
+        video_id = upload_to_youtube(
+            yt_service, local_path, title, script, scheduled, channel_num
+        )
         mark_as_done(sheet, row_num, video_id)
         print(f"\n🎉 완료!")
     finally:
         if os.path.exists(local_path):
             os.remove(local_path)
-
 
 if __name__ == "__main__":
     main()
