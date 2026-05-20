@@ -77,21 +77,29 @@ def mark_as_done(sheet, row_num, video_id):
 # ──────────────────────────────────────────
 def download_from_dropbox_url(dropbox_url):
     """
-    드롭박스 공유 URL을 직접 다운로드 링크로 변환 후 다운로드
-    dl=0 → dl=1 로 변경하면 직접 다운로드 가능
+    드롭박스 공유 URL (scl/fi 형식) 직접 다운로드
+    - rlkey 파라미터가 있는 공유 링크는 토큰 없이 직접 다운로드 가능
+    - st= 파라미터는 세션 토큰이라 제거해야 함
     """
-    # 직접 다운로드 URL로 변환
-    if "dl=0" in dropbox_url:
-        direct_url = dropbox_url.replace("dl=0", "dl=1")
-    elif "dl=1" in dropbox_url:
-        direct_url = dropbox_url
-    else:
-        direct_url = dropbox_url + "&dl=1" if "?" in dropbox_url else dropbox_url + "?dl=1"
+    import re
+
+    # st= 파라미터 제거 (세션 토큰, 있으면 400 에러 발생)
+    direct_url = re.sub(r'&st=[^&]*', '', dropbox_url)
+    direct_url = re.sub(r'\?st=[^&]*&', '?', direct_url)
+    direct_url = re.sub(r'\?st=[^&]*$', '', direct_url)
+
+    # dl=1 추가 (직접 다운로드 강제)
+    if "dl=0" in direct_url:
+        direct_url = direct_url.replace("dl=0", "dl=1")
+    elif "dl=1" not in direct_url:
+        direct_url += "&dl=1" if "?" in direct_url else "?dl=1"
 
     print(f"📥 드롭박스 다운로드 중...")
+    print(f"   URL: {direct_url[:80]}...")
 
-    headers = {"Authorization": f"Bearer {DROPBOX_TOKEN}"}
-    response = requests.get(direct_url, headers=headers, stream=True)
+    # 공유 링크는 토큰 없이 직접 다운로드
+    headers = {"User-Agent": "Mozilla/5.0"}
+    response = requests.get(direct_url, headers=headers, stream=True, allow_redirects=True)
     response.raise_for_status()
 
     tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
