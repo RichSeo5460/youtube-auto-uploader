@@ -11,15 +11,27 @@ YouTube 자동 업로드 스크립트 v5
 # 채널 번호 → 채널 ID 매핑
 # ──────────────────────────────────────────
 CHANNEL_MAP = {
-    "1": "UCMujLGISA9sRh0ki9H5xXLg",   # 모먼트랩
-    "2": "UCuyhcW0c4QCcCRtA5oeMn1w",   # 데일리인사이트
+    "1": "UCuyhcW0c4QCcCRtA5oeMn1w",   # 데일리인사이트
+    "2": "UCMujLGISA9sRh0ki9H5xXLg",   # 모먼트랩
     "3": "UCqr08lng11l-14li4vaLc3g",   # 생활정보TV
+    "4": "UC7wgb4aG0ytHl8MtOJwNBfw",   # 오늘의 회사썰
+    "5": "UCjysxDKwgwejYuMx3-WDKjg",   # 행복시니어TV
+    "6": "UCw8ETbGpdnXc8NJpdgmwrqw",   # 데일리AI브리핑
+    "7": "UCAdzqsKoItMWxKmhoC8aSrg",   # Healthier Living Today
+    "8": "UCjdqO74OEmNt9EL4H33VWUQ",   # Talk To Me In Korean
+    "9": "UCQ7JqaT39C1IuDelJcNVI1Q",   # GlobalTopTier
 }
 
 CHANNEL_NAMES = {
-    "1": "모먼트랩",
-    "2": "데일리인사이트",
+    "1": "데일리인사이트",
+    "2": "모먼트랩",
     "3": "생활정보TV",
+    "4": "오늘의회사썰",
+    "5": "행복시니어TV",
+    "6": "데일리AI브리핑",
+    "7": "HealthierLivingToday",
+    "8": "TalkToMeInKorean",
+    "9": "GlobalTopTier",
 }
 
 import os
